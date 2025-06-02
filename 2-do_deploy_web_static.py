@@ -1,58 +1,30 @@
 #!/usr/bin/python3
 """
-Fabric script that distributes an archive to web servers
+Fabric script based on the file 1-pack_web_static.py that distributes an
+archive to the web servers
 """
 
-from fabric import task, Connection
+from fabric.api import put, run, env
 from os.path import exists
-
-# Remote server IPs with SSH usernames
-env_hosts = ['ubuntu@54.224.252.175', 'ubuntu@54.175.30.67']
+env.hosts = ['3.83.255.189', '3.82.143.28']
 
 
-def deploy_archive(c, archive_path):
-    """Distributes an archive to one web server (Connection `c`)"""
-    if not exists(archive_path):
-        print("Archive does not exist.")
+def do_deploy(archive_path):
+    """distributes an archive to the web servers"""
+    if exists(archive_path) is False:
         return False
-
     try:
         file_n = archive_path.split("/")[-1]
         no_ext = file_n.split(".")[0]
-        release_dir = f"/data/web_static/releases/{no_ext}/"
-        tmp_path = f"/tmp/{file_n}"
-
-        # Upload archive
-        c.put(archive_path, tmp_path)
-
-        # Create release directory and extract
-        c.run(f"mkdir -p {release_dir}")
-        c.run(f"tar -xzf {tmp_path} -C {release_dir}")
-
-        # Clean up archive and restructure
-        c.run(f"rm {tmp_path}")
-        c.run(f"mv {release_dir}web_static/* {release_dir}")
-        c.run(f"rm -rf {release_dir}web_static")
-
-        # Update symbolic link
-        c.run("rm -rf /data/web_static/current")
-        c.run(f"ln -s {release_dir} /data/web_static/current")
-
-        print(f"Successfully deployed to {c.host}")
+        path = "/data/web_static/releases/"
+        put(archive_path, '/tmp/')
+        run('mkdir -p {}{}/'.format(path, no_ext))
+        run('tar -xzf /tmp/{} -C {}{}/'.format(file_n, path, no_ext))
+        run('rm /tmp/{}'.format(file_n))
+        run('mv {0}{1}/web_static/* {0}{1}/'.format(path, no_ext))
+        run('rm -rf {}{}/web_static'.format(path, no_ext))
+        run('rm -rf /data/web_static/current')
+        run('ln -s {}{}/ /data/web_static/current'.format(path, no_ext))
         return True
-
-    except Exception as e:
-        print(f" Deployment failed on {c.host}: {e}")
+    except:
         return False
-
-
-@task
-def do_deploy(c, archive_path):
-    """Distribute the archive to all configured web servers"""
-    results = []
-    for host in env_hosts:
-        print(f"🔁 Connecting to {host}...")
-        conn = Connection(host)
-        results.append(deploy_archive(conn, archive_path))
-
-    return all(results)
